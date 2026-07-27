@@ -208,7 +208,7 @@
 
       try {
         if (ext === 'pdf') {
-          md = await pdfToMarkdown(buffer);
+          md = await pdfToMarkdown(buf);
           // Check if OCR was used (has "OCR" in page headers)
           usedOcr = md.includes('(OCR)');
         } else if (imageExts.includes(ext)) {
