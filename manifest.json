@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "MarkItDown - AI File to Markdown",
+  "version": "1.0.0",
+  "description": "Convert files to Markdown before sending to AI chat — save tokens, keep context",
+  "permissions": ["activeTab", "storage"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chat.openai.com/*",
+        "https://chatgpt.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://copilot.microsoft.com/*",
+        "https://you.com/*",
+        "https://poe.com/*",
+        "https://huggingface.co/chat/*"
+      ],
+      "js": ["lib/pdf.min.js", "lib/mammoth.browser.min.js", "lib/xlsx.full.min.js", "content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["popup.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
