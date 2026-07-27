@@ -30,19 +30,23 @@
     .spin{width:36px;height:36px;border:3px solid #333;border-top-color:#667eea;border-radius:50%;animation:sp .7s linear infinite;margin:0 auto 12px}
     @keyframes sp{to{transform:rotate(360deg)}}
     #file{display:none}
-    .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#238636;color:#fff;padding:10px 20px;border-radius:8px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none}
+    .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#238636;color:#fff;padding:10px 20px;border-radius:8px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999}
     .toast.show{opacity:1}
+    .ocr-badge{display:inline-block;background:#f59e0b;color:#000;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;margin-left:8px}
+    .progress{width:100%;height:6px;background:#333;border-radius:3px;margin-top:10px;overflow:hidden;display:none}
+    .progress .bar{height:100%;background:linear-gradient(90deg,#667eea,#764ba2);width:0%;transition:width .3s}
+    .progress-text{font-size:12px;color:#888;margin-top:4px;text-align:center}
   </style>
 </head>
 <body>
   <h1>📄 <span>MarkItDown</span></h1>
-  <p class="sub">Convert any file to Markdown — paste into AI chat, save tokens</p>
+  <p class="sub">Convert any file to Markdown — with <strong>OCR</strong> for images & scanned PDFs</p>
 
   <div class="dropzone" id="dz">
     <div class="ic">📁</div>
     <p>Drop a file here or click to select</p>
-    <small>PDF • DOCX • XLSX • PPTX • CSV • TXT • MD • JSON • JS • PY</small>
-    <input type="file" id="file" accept=".pdf,.docx,.xlsx,.xls,.pptx,.txt,.md,.json,.xml,.html,.css,.js,.py,.ts,.csv,.java,.c,.cpp,.go,.rs">
+    <small>PDF • DOCX • XLSX • PPTX • CSV • TXT • MD • JSON • <strong>Images (OCR)</strong></small>
+    <input type="file" id="file" accept=".pdf,.docx,.xlsx,.xls,.pptx,.txt,.md,.json,.xml,.html,.css,.js,.py,.ts,.csv,.java,.c,.cpp,.go,.rs,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tiff">
   </div>
 
   <div id="out">
@@ -59,12 +63,18 @@
     </div>
   </div>
 
+  <div class="progress" id="prog">
+    <div class="bar" id="bar"></div>
+    <div class="progress-text" id="progTxt">Loading OCR engine...</div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <!-- CDN Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
   <script>
     // PDF.js worker
@@ -76,11 +86,25 @@
     const fi = document.getElementById('file');
     const out = document.getElementById('out');
     const toast = document.getElementById('toast');
+    const prog = document.getElementById('prog');
+    const bar = document.getElementById('bar');
+    const progTxt = document.getElementById('progTxt');
 
     function showToast(msg) {
       toast.textContent = msg;
       toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 2000);
+      setTimeout(() => toast.classList.remove('show'), 2500);
+    }
+
+    function showProgress(text, pct) {
+      prog.style.display = 'block';
+      progTxt.textContent = text;
+      bar.style.width = pct + '%';
+    }
+
+    function hideProgress() {
+      prog.style.display = 'none';
+      bar.style.width = '0%';
     }
 
     dz.onclick = () => fi.click();
@@ -111,23 +135,85 @@
       showToast('💾 Downloaded ' + name);
     };
 
+    // === OCR via Tesseract.js ===
+    async function ocrImage(imageData) {
+      showProgress('OCR: Loading engine...', 10);
+      const worker = await Tesseract.createWorker('eng', 1, {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            const pct = Math.round(m.progress * 100);
+            showProgress(`OCR: Recognizing... ${pct}%`, 10 + pct * 0.8);
+          }
+        }
+      });
+      showProgress('OCR: Processing...', 20);
+      const { data: { text } } = await worker.recognize(imageData);
+      await worker.terminate();
+      hideProgress();
+      return text;
+    }
+
+    // === PDF with OCR fallback ===
+    async function pdfToMarkdown(buffer) {
+      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+      let md = '';
+      let hasText = false;
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        showProgress(`PDF: Page ${i}/${pdf.numPages}...`, (i / pdf.numPages) * 80);
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const text = content.items.map(item => item.str).join(' ').trim();
+
+        if (text.length > 10) {
+          hasText = true;
+          md += `\n---\n**Page ${i}**\n\n${text}\n`;
+        } else {
+          // Scanned page — OCR it
+          showProgress(`OCR: Scanning page ${i}/${pdf.numPages}...`, (i / pdf.numPages) * 80);
+          const viewport = page.getViewport({ scale: 2.0 }); // higher res for OCR
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const ctx = canvas.getContext('2d');
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          const imgData = canvas.toDataURL('image/png');
+          const ocrText = await ocrImage(imgData);
+          if (ocrText.trim()) {
+            md += `\n---\n**Page ${i}** (OCR)\n\n${ocrText.trim()}\n`;
+          }
+        }
+      }
+      return md.trim() || (hasText ? '[PDF: no text found]' : '[PDF: scanned, OCR failed]');
+    }
+
+    // === Image OCR ===
+    async function imageToMarkdown(file) {
+      showProgress('OCR: Loading image...', 10);
+      const url = URL.createObjectURL(file);
+      const text = await ocrImage(url);
+      URL.revokeObjectURL(url);
+      return text.trim() || '[Image: no text detected]';
+    }
+
+    // === Main converter ===
     async function go(file) {
       if (!file) return;
       dz.innerHTML = '<div class="spin"></div><p>Converting...</p>';
       const buf = await file.arrayBuffer();
       const ext = file.name.split('.').pop().toLowerCase();
+      const imageExts = ['png','jpg','jpeg','webp','gif','bmp','tiff'];
       let md = '';
+      let usedOcr = false;
 
       try {
         if (ext === 'pdf') {
-          const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const content = await page.getTextContent();
-            const text = content.items.map(x => x.str).join(' ');
-            if (text.trim()) md += `\n---\n**Page ${i}**\n\n${text}\n`;
-          }
-          if (!md.trim()) md = '[PDF: no extractable text — try OCR]';
+          md = await pdfToMarkdown(buffer);
+          // Check if OCR was used (has "OCR" in page headers)
+          usedOcr = md.includes('(OCR)');
+        } else if (imageExts.includes(ext)) {
+          md = await imageToMarkdown(file);
+          usedOcr = true;
         } else if (ext === 'docx') {
           md = (await mammoth.convertToMarkdown({ arrayBuffer: buf })).value;
         } else if (ext === 'xlsx' || ext === 'xls') {
@@ -155,7 +241,9 @@
         } else {
           md = new TextDecoder().decode(buf);
         }
-      } catch(e) { md = `Error converting ${ext}: ${e.message}`; }
+      } catch(e) { md = `Error: ${e.message}`; }
+
+      hideProgress();
 
       // Show result
       const tokens = Math.ceil(md.length / 4);
@@ -166,8 +254,8 @@
       out.style.display = 'block';
       dz.style.display = 'none';
 
-      // Auto-copy to clipboard
-      try { await navigator.clipboard.writeText(md); showToast('✅ Converted & copied! Paste into AI chat'); }
+      // Auto-copy
+      try { await navigator.clipboard.writeText(md); showToast(`✅ Done! ${usedOcr ? '🔍 OCR used — ' : ''}Copied to clipboard`); }
       catch(e) { showToast('✅ Converted! Click Copy or Download'); }
     }
   </script>
