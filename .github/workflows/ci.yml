@@ -25,12 +25,11 @@ jobs:
             if (!m.content_scripts) throw new Error('No content_scripts');
             if (!m.background) throw new Error('No background');
             console.log('✅ Content scripts:', m.content_scripts[0].js.length, 'files');
-            console.log('✅ Matches:', m.content_scripts[0].matches);
           "
 
       - name: Check required files
         run: |
-          for f in manifest.json content.js content.css popup.html popup.js background.js converter.html; do
+          for f in manifest.json content.js content.css popup.html popup.js background.js converter.html converter.js; do
             if [ ! -f "$f" ]; then echo "❌ Missing: $f"; exit 1; fi
             echo "✅ $f"
           done
@@ -39,14 +38,13 @@ jobs:
         run: |
           for f in lib/pdf.min.js lib/pdf.worker.min.js lib/mammoth.browser.min.js lib/xlsx.full.min.js lib/tesseract.min.js; do
             if [ ! -f "$f" ]; then echo "❌ Missing: $f"; exit 1; fi
-            sz=$(wc -c < "$f")
-            echo "✅ $f ($sz bytes)"
+            echo "✅ $f ($(wc -c < "$f") bytes)"
           done
 
       - name: Validate JS syntax
         run: |
-          for f in content.js popup.js background.js; do
-            node --check "$f" 2>&1 && echo "✅ $f syntax OK" || echo "⚠️ $f syntax issue"
+          for f in content.js popup.js background.js converter.js; do
+            node --check "$f" 2>&1 && echo "✅ $f" || echo "⚠️ $f"
           done
 
   package:
@@ -58,54 +56,20 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Get version
-        id: version
+        id: v
         run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Package extension
         run: |
-          # Create clean zip (no git files)
-          zip -r markitdown-extension-${{ steps.version.outputs.tag }}.zip \
-            manifest.json content.js content.css popup.html popup.js background.js converter.html \
-            lib/ icons/ \
-            -x "*.DS_Store" "*.git*"
-          echo "📦 Packaged:"
-          ls -lh markitdown-extension-*.zip
+          zip -r markitdown-${{ steps.v.outputs.tag }}.zip \
+            manifest.json content.js content.css popup.html popup.js background.js \
+            converter.html converter.js lib/ icons/
+          ls -lh markitdown-*.zip
 
-      - name: Create GitHub Release
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: markitdown-extension-*.zip
+          files: markitdown-*.zip
           generate_release_notes: true
-          draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  deploy-pages:
-    name: 🌐 Deploy Demo Page
-    needs: validate
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master'
-    permissions:
-      pages: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Create demo page
-        run: |
-          mkdir -p _site
-          cp converter.html _site/index.html
-          cp -r lib/ _site/lib/
-          cp -r icons/ _site/icons/
-          cat > _site/_headers <<'EOF'
-          Content-Security-Policy: default-src 'self' https://cdnjs.cloudflare.com https://cdn.sheetjs.com https://cdn.jsdelivr.net 'unsafe-inline' 'unsafe-eval'
-          EOF
-
-      - name: Upload to GitHub Pages
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-
-      - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v4
