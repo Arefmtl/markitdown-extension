@@ -3,77 +3,117 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>📄 MarkItDown Converter</title>
+  <title>📄 MarkItDown — File to Markdown Converter</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-    h1 { font-size: 28px; margin: 20px 0 5px; }
-    h1 span { background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .subtitle { color: #888; margin-bottom: 30px; }
-    .dropzone { width: 100%; max-width: 700px; border: 2px dashed #333; border-radius: 16px; padding: 50px; text-align: center; cursor: pointer; transition: all 0.2s; }
-    .dropzone:hover, .dropzone.dragover { border-color: #667eea; background: rgba(102,126,234,0.08); }
-    .dropzone .icon { font-size: 50px; margin-bottom: 10px; }
-    .dropzone p { color: #aaa; font-size: 16px; }
-    .dropzone small { color: #555; }
-    #preview { width: 100%; max-width: 700px; margin-top: 20px; display: none; }
-    .info { display: flex; gap: 20px; margin-bottom: 12px; flex-wrap: wrap; }
-    .info-card { background: #161b22; padding: 12px 18px; border-radius: 10px; flex: 1; min-width: 150px; }
-    .info-card b { color: #667eea; }
-    textarea { width: 100%; height: 400px; background: #161b22; border: 1px solid #333; border-radius: 10px; color: #e0e0e0; padding: 14px; font-size: 13px; font-family: 'JetBrains Mono', monospace; resize: vertical; }
-    textarea:focus { outline: none; border-color: #667eea; }
-    .actions { display: flex; gap: 10px; margin-top: 12px; }
-    .btn { padding: 12px 24px; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
-    .btn:hover { opacity: 0.85; }
-    .btn-copy { background: #333; color: #e0e0e0; }
-    .btn-download { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
-    .spinner { width: 36px; height: 36px; border: 3px solid #333; border-top-color: #667eea; border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 12px; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    #dropfile { display: none; }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0d1117;color:#e0e0e0;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
+    h1{font-size:28px;margin:20px 0 5px}
+    h1 span{background:linear-gradient(135deg,#667eea,#764ba2);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .sub{color:#888;margin-bottom:30px}
+    .dropzone{width:100%;max-width:700px;border:2px dashed #333;border-radius:16px;padding:50px;text-align:center;cursor:pointer;transition:all .2s}
+    .dropzone:hover,.dropzone.over{border-color:#667eea;background:rgba(102,126,234,.08)}
+    .dropzone .ic{font-size:50px;margin-bottom:10px}
+    .dropzone p{color:#aaa;font-size:16px}
+    .dropzone small{color:#555}
+    #out{width:100%;max-width:700px;margin-top:20px;display:none}
+    .info{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+    .card{background:#161b22;padding:12px 18px;border-radius:10px;flex:1;min-width:140px}
+    .card b{color:#667eea}
+    textarea{width:100%;height:400px;background:#161b22;border:1px solid #333;border-radius:10px;color:#e0e0e0;padding:14px;font-size:13px;font-family:'JetBrains Mono',monospace;resize:vertical}
+    textarea:focus{outline:none;border-color:#667eea}
+    .btns{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+    .btn{padding:12px 24px;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity .2s}
+    .btn:hover{opacity:.85}
+    .b1{background:#333;color:#e0e0e0}
+    .b2{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff}
+    .b3{background:#238636;color:#fff}
+    .spin{width:36px;height:36px;border:3px solid #333;border-top-color:#667eea;border-radius:50%;animation:sp .7s linear infinite;margin:0 auto 12px}
+    @keyframes sp{to{transform:rotate(360deg)}}
+    #file{display:none}
+    .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#238636;color:#fff;padding:10px 20px;border-radius:8px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none}
+    .toast.show{opacity:1}
   </style>
 </head>
 <body>
   <h1>📄 <span>MarkItDown</span></h1>
-  <p class="subtitle">Convert any file to Markdown instantly</p>
+  <p class="sub">Convert any file to Markdown — paste into AI chat, save tokens</p>
 
-  <div class="dropzone" id="dropzone">
-    <div class="icon">📁</div>
+  <div class="dropzone" id="dz">
+    <div class="ic">📁</div>
     <p>Drop a file here or click to select</p>
-    <small>PDF • DOCX • XLSX • PPTX • CSV • TXT • MD • JSON</small>
-    <input type="file" id="dropfile" accept=".pdf,.docx,.xlsx,.xls,.pptx,.txt,.md,.json,.xml,.html,.css,.js,.py,.ts,.csv">
+    <small>PDF • DOCX • XLSX • PPTX • CSV • TXT • MD • JSON • JS • PY</small>
+    <input type="file" id="file" accept=".pdf,.docx,.xlsx,.xls,.pptx,.txt,.md,.json,.xml,.html,.css,.js,.py,.ts,.csv,.java,.c,.cpp,.go,.rs">
   </div>
 
-  <div id="preview">
+  <div id="out">
     <div class="info">
-      <div class="info-card">📄 <b id="fname">-</b></div>
-      <div class="info-card">📊 <b id="tokens">-</b> tokens</div>
-      <div class="info-card">📦 <b id="chars">-</b> chars</div>
+      <div class="card">📄 <b id="fn">-</b></div>
+      <div class="card">📊 <b id="tk">-</b> tokens</div>
+      <div class="card">📦 <b id="ch">-</b> chars</div>
     </div>
-    <textarea id="output" readonly></textarea>
-    <div class="actions">
-      <button class="btn btn-copy" id="copyBtn">📋 Copy</button>
-      <button class="btn btn-download" id="dlBtn">💾 Download .md</button>
+    <textarea id="md" readonly></textarea>
+    <div class="btns">
+      <button class="btn b1" id="cpBtn">📋 Copy</button>
+      <button class="btn b3" id="dlBtn">💾 Download .md</button>
+      <button class="btn b2" id="againBtn">🔄 Convert Another</button>
     </div>
   </div>
 
-  <script src="lib/pdf.min.js"></script>
-  <script src="lib/mammoth.browser.min.js"></script>
-  <script src="lib/xlsx.full.min.js"></script>
-  <script>
-    if (typeof pdfjsLib !== 'undefined') pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.js';
+  <div class="toast" id="toast"></div>
 
-    const dz = document.getElementById('dropzone');
-    const fi = document.getElementById('dropfile');
-    const pv = document.getElementById('preview');
+  <!-- CDN Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
+  <script>
+    // PDF.js worker
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+
+    const dz = document.getElementById('dz');
+    const fi = document.getElementById('file');
+    const out = document.getElementById('out');
+    const toast = document.getElementById('toast');
+
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2000);
+    }
 
     dz.onclick = () => fi.click();
-    dz.ondragover = e => { e.preventDefault(); dz.classList.add('dragover'); };
-    dz.ondragleave = () => dz.classList.remove('dragover');
-    dz.ondrop = e => { e.preventDefault(); dz.classList.remove('dragover'); convert(e.dataTransfer.files[0]); };
-    fi.onchange = e => convert(e.target.files[0]);
+    dz.ondragover = e => { e.preventDefault(); dz.classList.add('over'); };
+    dz.ondragleave = () => dz.classList.remove('over');
+    dz.ondrop = e => { e.preventDefault(); dz.classList.remove('over'); go(e.dataTransfer.files[0]); };
+    fi.onchange = e => go(e.target.files[0]);
 
-    async function convert(file) {
+    document.getElementById('againBtn').onclick = () => {
+      out.style.display = 'none';
+      dz.style.display = 'block';
+      fi.value = '';
+    };
+
+    document.getElementById('cpBtn').onclick = () => {
+      navigator.clipboard.writeText(document.getElementById('md').value);
+      showToast('✅ Copied to clipboard!');
+    };
+
+    document.getElementById('dlBtn').onclick = () => {
+      const text = document.getElementById('md').value;
+      const name = document.getElementById('fn').textContent.replace(/\.[^.]+$/, '') + '.md';
+      const blob = new Blob([text], { type: 'text/markdown' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      showToast('💾 Downloaded ' + name);
+    };
+
+    async function go(file) {
       if (!file) return;
-      dz.innerHTML = '<div class="spinner"></div><p>Converting...</p>';
+      dz.innerHTML = '<div class="spin"></div><p>Converting...</p>';
       const buf = await file.arrayBuffer();
       const ext = file.name.split('.').pop().toLowerCase();
       let md = '';
@@ -87,9 +127,9 @@
             const text = content.items.map(x => x.str).join(' ');
             if (text.trim()) md += `\n---\n**Page ${i}**\n\n${text}\n`;
           }
+          if (!md.trim()) md = '[PDF: no extractable text — try OCR]';
         } else if (ext === 'docx') {
-          const r = await mammoth.convertToMarkdown({ arrayBuffer: buf });
-          md = r.value;
+          md = (await mammoth.convertToMarkdown({ arrayBuffer: buf })).value;
         } else if (ext === 'xlsx' || ext === 'xls') {
           const wb = XLSX.read(buf, { type: 'array' });
           wb.SheetNames.forEach(name => {
@@ -101,7 +141,12 @@
         } else if (ext === 'pptx') {
           const txt = new TextDecoder().decode(buf);
           const m = txt.match(/<a:t[^>]*>([^<]*)<\/a:t>/g) || [];
-          md = m.map(x => x.replace(/<[^>]+>/g,'').trim()).filter(Boolean).join('\n');
+          let n = 1;
+          m.forEach((x, i) => {
+            const t = x.replace(/<[^>]+>/g,'').trim();
+            if (t) { if (i % 8 === 0 && i) md += `\n---\n**Slide ${++n}**\n\n`; md += t + '\n'; }
+          });
+          if (!md) md = '[PPTX: limited extraction]';
         } else if (ext === 'csv') {
           const lines = new TextDecoder().decode(buf).split('\n').filter(l=>l.trim());
           const p = l => l.split(',').map(c=>c.trim().replace(/^"|"$/g,''));
@@ -110,35 +155,21 @@
         } else {
           md = new TextDecoder().decode(buf);
         }
-      } catch(e) { md = `Error: ${e.message}`; }
+      } catch(e) { md = `Error converting ${ext}: ${e.message}`; }
 
       // Show result
       const tokens = Math.ceil(md.length / 4);
-      document.getElementById('fname').textContent = file.name;
-      document.getElementById('tokens').textContent = tokens.toLocaleString();
-      document.getElementById('chars').textContent = md.length.toLocaleString();
-      document.getElementById('output').value = md;
-      pv.style.display = 'block';
+      document.getElementById('fn').textContent = file.name;
+      document.getElementById('tk').textContent = tokens.toLocaleString();
+      document.getElementById('ch').textContent = md.length.toLocaleString();
+      document.getElementById('md').value = md;
+      out.style.display = 'block';
+      dz.style.display = 'none';
 
-      // Reset dropzone
-      dz.innerHTML = '<div class="icon">📁</div><p>Drop another file</p><small>PDF • DOCX • XLSX • PPTX • CSV • TXT • MD • JSON</small>';
+      // Auto-copy to clipboard
+      try { await navigator.clipboard.writeText(md); showToast('✅ Converted & copied! Paste into AI chat'); }
+      catch(e) { showToast('✅ Converted! Click Copy or Download'); }
     }
-
-    document.getElementById('copyBtn').onclick = () => {
-      navigator.clipboard.writeText(document.getElementById('output').value);
-      document.getElementById('copyBtn').textContent = '✅ Copied!';
-      setTimeout(() => document.getElementById('copyBtn').textContent = '📋 Copy', 1500);
-    };
-
-    document.getElementById('dlBtn').onclick = () => {
-      const text = document.getElementById('output').value;
-      const name = document.getElementById('fname').textContent.replace(/\.[^.]+$/, '') + '.md';
-      const blob = new Blob([text], { type: 'text/markdown' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = name;
-      a.click();
-    };
   </script>
 </body>
 </html>

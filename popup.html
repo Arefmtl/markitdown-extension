@@ -3,53 +3,60 @@
 <head>
   <meta charset="utf-8">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { width: 320px; font-family: -apple-system, sans-serif; background: #1a1a2e; color: #e0e0e0; }
-    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 16px; text-align: center; }
-    .header h1 { font-size: 18px; color: white; }
-    .header p { font-size: 12px; color: rgba(255,255,255,0.8); margin-top: 4px; }
-    .content { padding: 16px; }
-    .status { display: flex; align-items: center; gap: 8px; padding: 10px; background: #0d1117; border-radius: 8px; margin-bottom: 12px; }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; }
-    .dot.off { background: #ef4444; }
-    .formats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
-    .format { padding: 6px; background: #0d1117; border-radius: 6px; text-align: center; font-size: 11px; color: #aaa; }
-    .format b { color: #667eea; display: block; font-size: 13px; }
-    .converter-link { display: block; margin-top: 14px; padding: 12px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 10px; text-align: center; color: white; text-decoration: none; font-weight: 600; font-size: 14px; cursor: pointer; }
-    .converter-link:hover { opacity: 0.9; }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{width:300px;font-family:-apple-system,sans-serif;background:#1a1a2e;color:#e0e0e0}
+    .h{background:linear-gradient(135deg,#667eea,#764ba2);padding:14px;text-align:center}
+    .h h1{font-size:16px;color:#fff}
+    .h p{font-size:11px;color:rgba(255,255,255,.8);margin-top:3px}
+    .c{padding:14px}
+    .st{display:flex;align-items:center;gap:8px;padding:10px;background:#0d1117;border-radius:8px;margin-bottom:12px;font-size:13px}
+    .dot{width:8px;height:8px;border-radius:50%;background:#4ade80;flex-shrink:0}
+    .dot.off{background:#ef4444}
+    .go{display:block;padding:14px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:10px;text-align:center;color:#fff;text-decoration:none;font-weight:700;font-size:15px;cursor:pointer;border:none;width:100%;margin-top:8px}
+    .go:hover{opacity:.9}
+    .note{margin-top:12px;padding:10px;background:#0d1117;border-radius:8px;font-size:11px;color:#888;text-align:center}
   </style>
 </head>
 <body>
-  <div class="header">
+  <div class="h">
     <h1>📄 MarkItDown</h1>
-    <p>File → Markdown for AI chats</p>
+    <p>File → Markdown converter</p>
   </div>
-  <div class="content">
-    <div class="status">
+  <div class="c">
+    <div class="st">
       <div class="dot" id="dot"></div>
-      <span id="status">Checking...</span>
+      <span id="stxt">Checking...</span>
     </div>
-    <div class="formats">
-      <div class="format"><b>PDF</b>Extract</div>
-      <div class="format"><b>DOCX</b>Word</div>
-      <div class="format"><b>XLSX</b>Excel</div>
-      <div class="format"><b>PPTX</b>Slides</div>
-      <div class="format"><b>CSV</b>Tables</div>
-      <div class="format"><b>TXT</b>Text</div>
+    <button class="go" id="openConverter">🔢 Open Converter</button>
+    <div class="note">
+      Drop any file → get .md → paste into AI chat<br>
+      Saves ~90% tokens 💰
     </div>
-    <a class="converter-link" id="converterBtn">🔢 Standalone Converter</a>
   </div>
   <script>
-    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-      const host = new URL(tab.url).hostname;
-      const ai = ['chatgpt.com','chat.openai.com','claude.ai','gemini.google.com','copilot.microsoft.com','you.com','poe.com','huggingface.co'];
-      const dot = document.getElementById('dot');
-      const st = document.getElementById('status');
-      if (ai.some(s => host.includes(s))) { dot.classList.remove('off'); st.textContent = 'Active on ' + host; }
-      else { dot.classList.add('off'); st.textContent = 'Visit an AI chat page'; }
+    // Check current tab
+    chrome.tabs.query({active:true,currentWindow:true}, ([tab]) => {
+      try {
+        const host = new URL(tab.url).hostname;
+        const ai = ['chatgpt.com','chat.openai.com','claude.ai','gemini.google.com','copilot.microsoft.com','you.com','poe.com','huggingface.co'];
+        const dot = document.getElementById('dot');
+        const txt = document.getElementById('stxt');
+        if (ai.some(s => host.includes(s))) {
+          dot.classList.remove('off');
+          txt.textContent = 'Active on ' + host;
+        } else {
+          dot.classList.add('off');
+          txt.textContent = 'Open converter below ↓';
+        }
+      } catch(e) {
+        document.getElementById('stxt').textContent = 'Ready';
+      }
     });
-    document.getElementById('converterBtn').onclick = () => {
-      chrome.tabs.create({ url: chrome.runtime.getURL('converter.html') });
+
+    // Open converter in new tab
+    document.getElementById('openConverter').onclick = () => {
+      chrome.tabs.create({ url: 'converter.html' });
+      window.close();
     };
   </script>
 </body>
