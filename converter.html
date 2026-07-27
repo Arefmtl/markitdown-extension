@@ -77,9 +77,12 @@
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
   <script>
-    // PDF.js worker
+    // PDF.js worker — use local file if in extension, CDN if standalone
     if (typeof pdfjsLib !== 'undefined') {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const isExtension = typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = isExtension
+        ? chrome.runtime.getURL('lib/pdf.worker.min.js')
+        : 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     }
 
     const dz = document.getElementById('dz');
