@@ -1,38 +1,17 @@
 /**
- * MarkItDown Content Script
+ * MarkItDown Content Script v2
  * Injects file-to-markdown converter into AI chat interfaces
  */
 
 (function() {
   'use strict';
 
-  // === CONFIG ===
-  const PLATFORMS = {
-    chatgpt: {
-      selector: 'div#prompt-textarea, div[id="prompt-textarea"], textarea#prompt-textarea',
-      insertMethod: 'contenteditable',
-      container: 'form > div > div'
-    },
-    claude: {
-      selector: 'div.ProseMirror, div[contenteditable="true"]',
-      insertMethod: 'contenteditable',
-      container: 'div.flex.flex-col'
-    },
-    gemini: {
-      selector: 'div.ql-editor, rich-textarea .ql-editor',
-      insertMethod: 'contenteditable',
-      container: '.input-area'
-    },
-    copilot: {
-      selector: 'textarea, div[contenteditable="true"]',
-      insertMethod: 'contenteditable',
-      container: '#searchbox'
-    }
-  };
+  // === PDF.js Setup ===
+  if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdf.worker.min.js');
+  }
 
-  let currentPlatform = null;
-
-  // === DETECT PLATFORM ===
+  // === PLATFORM DETECTION ===
   function detectPlatform() {
     const host = window.location.hostname;
     if (host.includes('chatgpt.com') || host.includes('chat.openai.com')) return 'chatgpt';
@@ -42,128 +21,138 @@
     if (host.includes('you.com')) return 'you';
     if (host.includes('poe.com')) return 'poe';
     if (host.includes('huggingface.co')) return 'huggingface';
-    return null;
+    // Allow on ANY page for testing
+    return 'generic';
   }
 
   // === FILE CONVERTERS ===
 
   async function pdfToMarkdown(buffer) {
+    if (typeof pdfjsLib === 'undefined') return '[PDF.js not loaded]';
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
     let md = '';
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
       const text = content.items.map(item => item.str).join(' ');
-      md += `\n---\n**Page ${i}**\n\n${text}\n`;
+      if (text.trim()) md += `\n---\n**Page ${i}**\n\n${text}\n`;
     }
-    return md.trim();
+    return md.trim() || '[PDF: no extractable text]';
   }
 
   async function docxToMarkdown(buffer) {
+    if (typeof mammoth === 'undefined') return '[Mammoth not loaded]';
     const result = await mammoth.convertToMarkdown({ arrayBuffer: buffer });
     return result.value;
   }
 
   async function xlsxToMarkdown(buffer) {
+    if (typeof XLSX === 'undefined') return '[SheetJS not loaded]';
     const wb = XLSX.read(buffer, { type: 'array' });
     let md = '';
     wb.SheetNames.forEach(name => {
       const sheet = wb.Sheets[name];
-      const csv = XLSX.utils.sheet_to_csv(sheet);
-      md += `\n### Sheet: ${name}\n\n|${csv.replace(/\n/g, '\n|')}\n`;
+      const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      if (data.length === 0) return;
+      md += `\n### 📊 Sheet: ${name}\n\n`;
+      // Table header
+      md += '| ' + data[0].join(' | ') + ' |\n';
+      md += '| ' + data[0].map(() => '---').join(' | ') + ' |\n';
+      // Table rows
+      data.slice(1).forEach(row => {
+        md += '| ' + row.map(c => c ?? '').join(' | ') + ' |\n';
+      });
     });
     return md.trim();
   }
 
   async function pptxToMarkdown(buffer) {
-    // PPTX is ZIP with XML - extract text
     const text = new TextDecoder().decode(buffer);
-    const slides = text.match(/<a:t[^>]*>([^<]*)<\/a:t>/g) || [];
+    const matches = text.match(/<a:t[^>]*>([^<]*)<\/a:t>/g) || [];
     let md = '';
     let slideNum = 1;
-    slides.forEach((match, i) => {
-      if (i % 10 === 0 && i > 0) slideNum++;
+    let itemCount = 0;
+    matches.forEach((match) => {
       const content = match.replace(/<[^>]+>/g, '').trim();
-      if (content) md += `${content}\n`;
+      if (content) {
+        if (itemCount % 8 === 0 && itemCount > 0) {
+          md += `\n---\n**Slide ${++slideNum}**\n\n`;
+        }
+        md += content + '\n';
+        itemCount++;
+      }
     });
-    return md.trim() || '[PPTX: text extraction limited - try converting to PDF first]';
-  }
-
-  async function txtToMarkdown(buffer) {
-    return new TextDecoder().decode(buffer);
+    return md.trim() || '[PPTX: limited text extraction]';
   }
 
   async function csvToMarkdown(buffer) {
     const text = new TextDecoder().decode(buffer);
     const lines = text.split('\n').filter(l => l.trim());
     if (lines.length === 0) return '';
-    const headers = lines[0].split(',').map(h => h.trim());
+    const parse = (line) => line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+    const headers = parse(lines[0]);
     let md = '| ' + headers.join(' | ') + ' |\n';
     md += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
-    lines.slice(1).forEach(line => {
-      const cells = line.split(',').map(c => c.trim());
-      md += '| ' + cells.join(' | ') + ' |\n';
+    lines.slice(1, 51).forEach(line => { // limit to 50 rows
+      md += '| ' + parse(line).join(' | ') + ' |\n';
     });
+    if (lines.length > 51) md += `\n*... ${lines.length - 1} total rows (showing first 50)*\n`;
     return md;
   }
 
-  // === MAIN CONVERTER ===
   async function convertFile(file) {
     const buffer = await file.arrayBuffer();
     const ext = file.name.split('.').pop().toLowerCase();
-
     switch (ext) {
       case 'pdf': return pdfToMarkdown(buffer);
       case 'docx': return docxToMarkdown(buffer);
       case 'xlsx': case 'xls': return xlsxToMarkdown(buffer);
       case 'pptx': return pptxToMarkdown(buffer);
-      case 'txt': case 'md': case 'json': case 'xml': case 'html': case 'css': case 'js':
-        return txtToMarkdown(buffer);
       case 'csv': return csvToMarkdown(buffer);
-      default:
-        return `[Unsupported file type: .${ext}]`;
+      case 'txt': case 'md': case 'json': case 'xml': case 'html': case 'css': case 'js': case 'py': case 'ts':
+        return new TextDecoder().decode(buffer);
+      default: return `[Unsupported: .${ext}]`;
     }
   }
 
   // === TOKEN ESTIMATOR ===
   function estimateTokens(text) {
-    // ~4 chars per token for English, ~2 for CJK
     return Math.ceil(text.length / 4);
-  }
-
-  function estimateFileTokens(file) {
-    // Rough: 1 token per byte for binary, much more for text
-    return Math.ceil(file.size / 3);
   }
 
   // === INJECT TEXT INTO CHAT ===
   function injectIntoChat(text) {
-    const platform = PLATFORMS[currentPlatform];
-    if (!platform) return false;
-
-    const input = document.querySelector(platform.selector);
-    if (!input) return false;
-
-    if (platform.insertMethod === 'contenteditable') {
-      input.focus();
-      // For contenteditable divs
-      if (input.tagName === 'TEXTAREA') {
-        input.value = text;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-      } else {
-        // contenteditable div
-        input.innerHTML = text.replace(/\n/g, '<br>');
-        input.dispatchEvent(new Event('input', { bubbles: true }));
+    // Try multiple selectors for different platforms
+    const selectors = [
+      'div#prompt-textarea',           // ChatGPT
+      'div[contenteditable="true"]',    // Claude, generic
+      'div.ql-editor',                 // Gemini
+      'textarea',                      // Fallback
+    ];
+    
+    for (const sel of selectors) {
+      const input = document.querySelector(sel);
+      if (input && input.offsetParent !== null) { // visible check
+        input.focus();
+        if (input.tagName === 'TEXTAREA') {
+          const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+          nativeInputValueSetter.call(input, text);
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        } else {
+          // contenteditable
+          input.innerHTML = text.replace(/\n/g, '<br>');
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        return true;
       }
     }
-    return true;
+    return false;
   }
 
-  // === UI ===
+  // === CREATE UI PANEL ===
   function createUI() {
-    // Remove old UI if exists
     const old = document.getElementById('markitdown-panel');
-    if (old) old.remove();
+    if (old) { old.remove(); return; }
 
     const panel = document.createElement('div');
     panel.id = 'markitdown-panel';
@@ -175,9 +164,10 @@
       <div class="md-body">
         <div class="md-dropzone" id="md-dropzone">
           <div class="md-drop-icon">📁</div>
-          <div class="md-drop-text">Drop file here or click to select</div>
-          <div class="md-drop-hint">PDF, DOCX, XLSX, PPTX, TXT, CSV</div>
-          <input type="file" id="md-file-input" accept=".pdf,.docx,.xlsx,.xls,.pptx,.txt,.md,.json,.xml,.html,.css,.js,.csv" hidden>
+          <div class="md-drop-text">Drop file here or click</div>
+          <div class="md-drop-hint">PDF, DOCX, XLSX, PPTX, CSV, TXT</div>
+          <input type="file" id="md-file-input" 
+                 accept=".pdf,.docx,.xlsx,.xls,.pptx,.txt,.md,.json,.xml,.html,.css,.js,.py,.ts,.csv" hidden>
         </div>
         <div class="md-preview" id="md-preview" style="display:none">
           <div class="md-file-info" id="md-file-info"></div>
@@ -196,101 +186,87 @@
     `;
     document.body.appendChild(panel);
 
-    // Event listeners
+    // Events
     document.getElementById('md-close').onclick = () => panel.remove();
     document.getElementById('md-dropzone').onclick = () => document.getElementById('md-file-input').click();
     document.getElementById('md-file-input').onchange = (e) => handleFile(e.target.files[0]);
 
-    const dropzone = document.getElementById('md-dropzone');
-    dropzone.ondragover = (e) => { e.preventDefault(); dropzone.classList.add('md-dragover'); };
-    dropzone.ondragleave = () => dropzone.classList.remove('md-dragover');
-    dropzone.ondrop = (e) => {
+    const dz = document.getElementById('md-dropzone');
+    dz.ondragover = (e) => { e.preventDefault(); dz.classList.add('md-dragover'); };
+    dz.ondragleave = () => dz.classList.remove('md-dragover');
+    dz.ondrop = (e) => {
       e.preventDefault();
-      dropzone.classList.remove('md-dragover');
+      dz.classList.remove('md-dragover');
       if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
     };
 
     document.getElementById('md-copy').onclick = () => {
       const text = document.getElementById('md-textarea').value;
-      navigator.clipboard.writeText(text);
-      document.getElementById('md-copy').textContent = '✅ Copied!';
-      setTimeout(() => document.getElementById('md-copy').textContent = '📋 Copy', 1500);
+      navigator.clipboard.writeText(text).then(() => {
+        document.getElementById('md-copy').textContent = '✅ Copied!';
+        setTimeout(() => document.getElementById('md-copy').textContent = '📋 Copy', 1500);
+      });
     };
 
     document.getElementById('md-insert').onclick = () => {
       const text = document.getElementById('md-textarea').value;
       if (injectIntoChat(text)) {
         document.getElementById('md-insert').textContent = '✅ Inserted!';
-        setTimeout(() => {
-          document.getElementById('md-insert').textContent = '⚡ Insert to Chat';
-          panel.remove();
-        }, 1000);
+        setTimeout(() => { panel.remove(); }, 1000);
       } else {
-        document.getElementById('md-insert').textContent = '❌ Chat box not found';
+        // Fallback: copy to clipboard
+        navigator.clipboard.writeText(text);
+        document.getElementById('md-insert').textContent = '📋 Copied! Paste manually';
       }
     };
   }
 
   async function handleFile(file) {
     if (!file) return;
-
     document.getElementById('md-dropzone').style.display = 'none';
     document.getElementById('md-converting').style.display = 'flex';
-
     try {
-      const markdown = await convertFile(file);
-      const tokens = estimateTokens(markdown);
-      const originalTokens = estimateFileTokens(file);
-
+      const md = await convertFile(file);
+      const tokens = estimateTokens(md);
       document.getElementById('md-converting').style.display = 'none';
       document.getElementById('md-preview').style.display = 'block';
-
-      document.getElementById('md-file-info').innerHTML = `
-        <strong>${file.name}</strong> (${(file.size / 1024).toFixed(1)} KB)
-      `;
-      document.getElementById('md-token-info').innerHTML = `
-        📊 Markdown: ~${tokens.toLocaleString()} tokens
-        ${originalTokens > tokens ? `<span class="md-saved">💾 Saved ~${(originalTokens - tokens).toLocaleString()} tokens!</span>` : ''}
-      `;
-      document.getElementById('md-textarea').value = markdown;
+      document.getElementById('md-file-info').innerHTML = `<strong>${file.name}</strong> (${(file.size/1024).toFixed(1)} KB)`;
+      document.getElementById('md-token-info').innerHTML = `📊 ~${tokens.toLocaleString()} tokens`;
+      document.getElementById('md-textarea').value = md;
     } catch (err) {
       document.getElementById('md-converting').style.display = 'none';
       document.getElementById('md-dropzone').style.display = 'flex';
-      document.getElementById('md-drop-text').textContent = `Error: ${err.message}`;
+      document.querySelector('.md-drop-text').textContent = `Error: ${err.message}`;
     }
   }
 
-  // === INJECT FLOATING BUTTON ===
+  // === FLOATING BUTTON ===
   function injectButton() {
     if (document.getElementById('md-fab')) return;
-
     const fab = document.createElement('div');
     fab.id = 'md-fab';
-    fab.innerHTML = '📄';
+    fab.textContent = '📄';
     fab.title = 'MarkItDown - Convert file to Markdown';
     fab.onclick = createUI;
     document.body.appendChild(fab);
+    console.log('[MarkItDown] FAB injected');
   }
 
   // === INIT ===
   function init() {
-    currentPlatform = detectPlatform();
-    if (!currentPlatform) return;
-
-    console.log(`[MarkItDown] Detected platform: ${currentPlatform}`);
+    const platform = detectPlatform();
+    console.log(`[MarkItDown] Platform: ${platform}`);
     injectButton();
-
-    // Re-inject if SPA navigation happens
-    const observer = new MutationObserver(() => {
+    // Re-inject on DOM changes (SPA navigation)
+    new MutationObserver(() => {
       if (!document.getElementById('md-fab')) injectButton();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
+    }).observe(document.body, { childList: true, subtree: true });
   }
 
-  // Wait for page to load
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
-    init();
+    // Small delay to ensure page is ready
+    setTimeout(init, 500);
   }
 })();

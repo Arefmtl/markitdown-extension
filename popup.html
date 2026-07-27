@@ -4,84 +4,53 @@
   <meta charset="utf-8">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      width: 320px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #1a1a2e;
-      color: #e0e0e0;
-    }
-    .header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      padding: 16px;
-      text-align: center;
-    }
+    body { width: 320px; font-family: -apple-system, sans-serif; background: #1a1a2e; color: #e0e0e0; }
+    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 16px; text-align: center; }
     .header h1 { font-size: 18px; color: white; }
     .header p { font-size: 12px; color: rgba(255,255,255,0.8); margin-top: 4px; }
     .content { padding: 16px; }
-    .status {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px;
-      background: #0d1117;
-      border-radius: 8px;
-      margin-bottom: 12px;
-    }
-    .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #4ade80;
-    }
+    .status { display: flex; align-items: center; gap: 8px; padding: 10px; background: #0d1117; border-radius: 8px; margin-bottom: 12px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; }
     .dot.off { background: #ef4444; }
-    .formats {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 6px;
-      margin-top: 12px;
-    }
-    .format {
-      padding: 6px;
-      background: #0d1117;
-      border-radius: 6px;
-      text-align: center;
-      font-size: 11px;
-      color: #aaa;
-    }
+    .formats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
+    .format { padding: 6px; background: #0d1117; border-radius: 6px; text-align: center; font-size: 11px; color: #aaa; }
     .format b { color: #667eea; display: block; font-size: 13px; }
-    .tip {
-      margin-top: 12px;
-      padding: 10px;
-      background: rgba(102, 126, 234, 0.1);
-      border-left: 3px solid #667eea;
-      border-radius: 0 6px 6px 0;
-      font-size: 12px;
-      color: #aaa;
-    }
+    .converter-link { display: block; margin-top: 14px; padding: 12px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 10px; text-align: center; color: white; text-decoration: none; font-weight: 600; font-size: 14px; cursor: pointer; }
+    .converter-link:hover { opacity: 0.9; }
   </style>
 </head>
 <body>
   <div class="header">
     <h1>📄 MarkItDown</h1>
-    <p>Convert files to Markdown for AI chats</p>
+    <p>File → Markdown for AI chats</p>
   </div>
   <div class="content">
     <div class="status">
-      <div class="dot" id="status-dot"></div>
-      <span id="status-text">Checking...</span>
+      <div class="dot" id="dot"></div>
+      <span id="status">Checking...</span>
     </div>
     <div class="formats">
-      <div class="format"><b>PDF</b>Extract text</div>
-      <div class="format"><b>DOCX</b>Word docs</div>
-      <div class="format"><b>XLSX</b>Excel sheets</div>
-      <div class="format"><b>PPTX</b>PowerPoint</div>
+      <div class="format"><b>PDF</b>Extract</div>
+      <div class="format"><b>DOCX</b>Word</div>
+      <div class="format"><b>XLSX</b>Excel</div>
+      <div class="format"><b>PPTX</b>Slides</div>
       <div class="format"><b>CSV</b>Tables</div>
-      <div class="format"><b>TXT</b>Plain text</div>
+      <div class="format"><b>TXT</b>Text</div>
     </div>
-    <div class="tip">
-      💡 Click the 📄 button on any AI chat page to convert and insert files.
-    </div>
+    <a class="converter-link" id="converterBtn">🔢 Standalone Converter</a>
   </div>
-  <script src="popup.js"></script>
+  <script>
+    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+      const host = new URL(tab.url).hostname;
+      const ai = ['chatgpt.com','chat.openai.com','claude.ai','gemini.google.com','copilot.microsoft.com','you.com','poe.com','huggingface.co'];
+      const dot = document.getElementById('dot');
+      const st = document.getElementById('status');
+      if (ai.some(s => host.includes(s))) { dot.classList.remove('off'); st.textContent = 'Active on ' + host; }
+      else { dot.classList.add('off'); st.textContent = 'Visit an AI chat page'; }
+    });
+    document.getElementById('converterBtn').onclick = () => {
+      chrome.tabs.create({ url: chrome.runtime.getURL('converter.html') });
+    };
+  </script>
 </body>
 </html>
