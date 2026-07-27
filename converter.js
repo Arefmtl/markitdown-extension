@@ -1,5 +1,6 @@
 /**
  * MarkItDown Converter — shared JS for converter.html and docs/index.html
+ * v1.3.2 — bug fixes: OCR memory leak, canvas reuse, CSV parser
  */
 (function() {
   'use strict';
@@ -29,7 +30,7 @@
   function showProgress(text, pct) {
     prog.style.display = 'block';
     progTxt.textContent = text;
-    bar.style.width = pct + '%';
+    bar.style.width = Math.min(pct, 100) + '%';
   }
 
   function hideProgress() { prog.style.display = 'none'; bar.style.width = '0%'; }
@@ -45,8 +46,9 @@
   };
 
   document.getElementById('cpBtn').onclick = () => {
-    navigator.clipboard.writeText(document.getElementById('md').value);
-    showToast('✅ Copied!');
+    navigator.clipboard.writeText(document.getElementById('md').value).then(() =>
+      showToast('✅ Copied!')
+    );
   };
 
   document.getElementById('dlBtn').onclick = () => {
@@ -55,47 +57,96 @@
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }));
     a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     showToast('💾 Downloaded ' + name);
   };
 
-  async function ocrImage(data) {
-    showProgress('OCR: Loading engine...', 10);
-    const worker = await Tesseract.createWorker('eng', 1, {
+  // === OCR with proper cleanup ===
+  let ocrWorker = null;
+
+  async function getOcrWorker() {
+    if (ocrWorker) return ocrWorker;
+    showProgress('OCR: Loading engine (~30MB first time)...', 5);
+    ocrWorker = await Tesseract.createWorker('eng', 1, {
       logger: m => {
         if (m.status === 'recognizing text')
           showProgress(`OCR: ${Math.round(m.progress * 100)}%`, 10 + m.progress * 80);
       }
     });
-    showProgress('OCR: Processing...', 20);
-    const { data: { text } } = await worker.recognize(data);
-    await worker.terminate();
-    hideProgress();
-    return text;
+    return ocrWorker;
   }
 
+  async function ocrImage(data) {
+    let worker = null;
+    try {
+      worker = await getOcrWorker();
+      showProgress('OCR: Processing...', 20);
+      const { data: { text } } = await worker.recognize(data);
+      return text;
+    } catch (e) {
+      console.error('OCR failed:', e);
+      return '[OCR failed: ' + e.message + ']';
+    }
+    // DON'T terminate — reuse for next image
+  }
+
+  // === CSV parser — handles quoted fields ===
+  function parseCsvLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
+        else if (ch === '"') { inQuotes = false; }
+        else { current += ch; }
+      } else {
+        if (ch === '"') { inQuotes = true; }
+        else if (ch === ',') { result.push(current.trim()); current = ''; }
+        else { current += ch; }
+      }
+    }
+    result.push(current.trim());
+    return result;
+  }
+
+  // === PDF with OCR fallback ===
   async function pdfToMd(buf) {
     const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
     let md = '';
+    // Reuse single canvas to avoid memory leak
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
     for (let i = 1; i <= pdf.numPages; i++) {
-      showProgress(`PDF: ${i}/${pdf.numPages}`, (i / pdf.numPages) * 80);
+      showProgress(`PDF: page ${i}/${pdf.numPages}`, (i / pdf.numPages) * 80);
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
       const text = content.items.map(x => x.str).join(' ').trim();
+
       if (text.length > 10) {
         md += `\n---\n**Page ${i}**\n\n${text}\n`;
       } else {
-        showProgress(`OCR: page ${i}/${pdf.numPages}`, (i / pdf.numPages) * 80);
+        // Scanned page — OCR it
+        showProgress(`OCR: scanning page ${i}/${pdf.numPages}`, (i / pdf.numPages) * 80);
         const vp = page.getViewport({ scale: 2.0 });
-        const c = document.createElement('canvas');
-        c.width = vp.width; c.height = vp.height;
-        await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
-        const t = await ocrImage(c.toDataURL('image/png'));
-        if (t.trim()) md += `\n---\n**Page ${i}** (OCR)\n\n${t.trim()}\n`;
+        canvas.width = vp.width;
+        canvas.height = vp.height;
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        const imgData = canvas.toDataURL('image/png');
+        const ocrText = await ocrImage(imgData);
+        if (ocrText && ocrText.trim() && !ocrText.startsWith('[OCR failed')) {
+          md += `\n---\n**Page ${i}** (OCR)\n\n${ocrText.trim()}\n`;
+        } else {
+          md += `\n---\n**Page ${i}** *(empty)*\n`;
+        }
       }
     }
     return md.trim() || '[PDF: no text found]';
   }
 
+  // === Main converter ===
   async function go(file) {
     if (!file) return;
     dz.innerHTML = '<div class="spin"></div><p>Converting...</p>';
@@ -105,12 +156,20 @@
     let md = '', usedOcr = false;
 
     try {
-      if (ext === 'pdf') { md = await pdfToMd(buf); usedOcr = md.includes('OCR'); }
-      else if (imgExts.includes(ext)) {
+      if (ext === 'pdf') {
+        md = await pdfToMd(buf);
+        usedOcr = md.includes('(OCR)');
+      } else if (imgExts.includes(ext)) {
         const url = URL.createObjectURL(file);
-        md = await ocrImage(url); URL.revokeObjectURL(url); usedOcr = true;
-      } else if (ext === 'docx') { md = (await mammoth.convertToMarkdown({ arrayBuffer: buf })).value; }
-      else if (ext === 'xlsx' || ext === 'xls') {
+        try {
+          md = await ocrImage(url);
+          usedOcr = true;
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      } else if (ext === 'docx') {
+        md = (await mammoth.convertToMarkdown({ arrayBuffer: buf })).value;
+      } else if (ext === 'xlsx' || ext === 'xls') {
         const wb = XLSX.read(buf, { type: 'array' });
         wb.SheetNames.forEach(n => {
           const d = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1 });
@@ -126,14 +185,19 @@
           const t = x.replace(/<[^>]+>/g,'').trim();
           if (t) { if (i % 8 === 0 && i) md += `\n---\n**Slide ${++n}**\n\n`; md += t + '\n'; }
         });
-        if (!md) md = '[PPTX: limited]';
+        if (!md) md = '[PPTX: limited extraction]';
       } else if (ext === 'csv') {
         const lines = new TextDecoder().decode(buf).split('\n').filter(l=>l.trim());
-        const p = l => l.split(',').map(c=>c.trim().replace(/^"|"$/g,''));
-        md = `| ${p(lines[0]).join(' | ')} |\n| ${p(lines[0]).map(()=>'---').join(' | ')} |\n`;
-        lines.slice(1).forEach(l => md += `| ${p(l).join(' | ')} |\n`);
-      } else { md = new TextDecoder().decode(buf); }
-    } catch(e) { md = `Error: ${e.message}`; }
+        if (lines.length > 0) {
+          const headers = parseCsvLine(lines[0]);
+          md = `| ${headers.join(' | ')} |\n| ${headers.map(()=>'---').join(' | ')} |\n`;
+          lines.slice(1, 101).forEach(l => md += `| ${parseCsvLine(l).join(' | ')} |\n`);
+          if (lines.length > 101) md += `\n*... ${lines.length - 1} total rows (showing first 100)*\n`;
+        }
+      } else {
+        md = new TextDecoder().decode(buf);
+      }
+    } catch(e) { md = `Error converting .${ext}: ${e.message}`; }
 
     hideProgress();
     const tokens = Math.ceil(md.length / 4);
