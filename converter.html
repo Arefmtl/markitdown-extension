@@ -6,35 +6,225 @@
   <title>📄 MarkItDown — File to Markdown</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0d1117;color:#e0e0e0;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px}
-    h1{font-size:28px;margin:20px 0 5px}
-    h1 span{background:linear-gradient(135deg,#667eea,#764ba2);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-    .sub{color:#888;margin-bottom:30px}
-    .dropzone{width:100%;max-width:700px;border:2px dashed #333;border-radius:16px;padding:50px;text-align:center;cursor:pointer;transition:all .2s}
-    .dropzone:hover,.dropzone.over{border-color:#667eea;background:rgba(102,126,234,.08)}
-    .dropzone .ic{font-size:50px;margin-bottom:10px}
-    .dropzone p{color:#aaa;font-size:16px}
-    .dropzone small{color:#555}
-    #out{width:100%;max-width:700px;margin-top:20px;display:none}
-    .info{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
-    .card{background:#161b22;padding:12px 18px;border-radius:10px;flex:1;min-width:140px}
-    .card b{color:#667eea}
-    textarea{width:100%;height:400px;background:#161b22;border:1px solid #333;border-radius:10px;color:#e0e0e0;padding:14px;font-size:13px;font-family:'JetBrains Mono',monospace;resize:vertical}
-    textarea:focus{outline:none;border-color:#667eea}
-    .btns{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
-    .btn{padding:12px 24px;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity .2s}
-    .btn:hover{opacity:.85}
-    .b1{background:#333;color:#e0e0e0}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      background:#0d1117;
+      color:#e0e0e0;
+      min-height:100vh;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      padding:20px;
+    }
+
+    /* === HEADER === */
+    h1{
+      font-size:32px;
+      margin:20px 0 8px;
+      font-weight:700;
+    }
+    h1 span{
+      background:linear-gradient(135deg,#667eea,#764ba2);
+      -webkit-background-clip:text;
+      -webkit-text-fill-color:transparent;
+    }
+    .sub{
+      color:#8b949e;
+      margin-bottom:30px;
+      font-size:14px;
+    }
+
+    /* === DROPZONE === */
+    .dropzone{
+      width:100%;
+      max-width:700px;
+      border:2px dashed #30363d;
+      border-radius:16px;
+      padding:60px 40px;
+      text-align:center;
+      cursor:pointer;
+      transition:all .2s;
+      background:#161b22;
+    }
+    .dropzone:hover,.dropzone.over{
+      border-color:#667eea;
+      background:rgba(102,126,234,.08);
+    }
+    .dropzone .ic{
+      font-size:60px;
+      margin-bottom:16px;
+    }
+    .dropzone p{
+      color:#c9d1d9;
+      font-size:18px;
+      margin-bottom:8px;
+    }
+    .dropzone small{
+      color:#8b949e;
+      font-size:13px;
+    }
+    .dropzone .formats{
+      margin-top:16px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      justify-content:center;
+    }
+    .dropzone .format{
+      background:#21262d;
+      border:1px solid #30363d;
+      border-radius:6px;
+      padding:4px 10px;
+      font-size:11px;
+      color:#8b949e;
+    }
+    .dropzone .format.ocr{
+      border-color:#667eea;
+      color:#667eea;
+    }
+
+    /* === OUTPUT === */
+    #out{
+      width:100%;
+      max-width:700px;
+      margin-top:24px;
+      display:none;
+    }
+
+    /* === INFO CARDS === */
+    .info{
+      display:flex;
+      gap:12px;
+      margin-bottom:16px;
+      flex-wrap:wrap;
+    }
+    .card{
+      background:#161b22;
+      border:1px solid #30363d;
+      padding:14px 20px;
+      border-radius:10px;
+      flex:1;
+      min-width:140px;
+    }
+    .card b{
+      color:#667eea;
+      font-size:18px;
+    }
+    .card-label{
+      font-size:11px;
+      color:#8b949e;
+      margin-top:4px;
+    }
+
+    /* === TEXTAREA === */
+    textarea{
+      width:100%;
+      height:400px;
+      background:#161b22;
+      border:1px solid #30363d;
+      border-radius:10px;
+      color:#e0e0e0;
+      padding:16px;
+      font-size:13px;
+      font-family:'JetBrains Mono','Fira Code',monospace;
+      resize:vertical;
+      line-height:1.6;
+    }
+    textarea:focus{
+      outline:none;
+      border-color:#667eea;
+      box-shadow:0 0 0 3px rgba(102,126,234,.15);
+    }
+
+    /* === BUTTONS === */
+    .btns{
+      display:flex;
+      gap:12px;
+      margin-top:16px;
+      flex-wrap:wrap;
+    }
+    .btn{
+      padding:14px 28px;
+      border:none;
+      border-radius:10px;
+      font-size:14px;
+      font-weight:600;
+      cursor:pointer;
+      transition:all .15s;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .btn:hover{opacity:.9}
+    .btn:active{transform:scale(.97)}
+    .b1{background:#21262d;color:#e0e0e0;border:1px solid #30363d}
     .b2{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff}
     .b3{background:#238636;color:#fff}
-    .spin{width:36px;height:36px;border:3px solid #333;border-top-color:#667eea;border-radius:50%;animation:sp .7s linear infinite;margin:0 auto 12px}
+
+    /* === PROGRESS === */
+    .progress{
+      width:100%;
+      max-width:700px;
+      margin-top:16px;
+      display:none;
+    }
+    .progress-bar{
+      height:6px;
+      background:#21262d;
+      border-radius:3px;
+      overflow:hidden;
+    }
+    .progress-fill{
+      height:100%;
+      background:linear-gradient(90deg,#667eea,#764ba2);
+      width:0%;
+      transition:width .3s;
+    }
+    .progress-text{
+      font-size:12px;
+      color:#8b949e;
+      margin-top:8px;
+      text-align:center;
+    }
+
+    /* === SPINNER === */
+    .spin{
+      width:40px;height:40px;
+      border:3px solid #30363d;
+      border-top-color:#667eea;
+      border-radius:50%;
+      animation:sp .7s linear infinite;
+      margin:0 auto 16px;
+    }
     @keyframes sp{to{transform:rotate(360deg)}}
-    #file{display:none}
-    .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#238636;color:#fff;padding:10px 20px;border-radius:8px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999}
+
+    /* === TOAST === */
+    .toast{
+      position:fixed;
+      bottom:24px;
+      left:50%;
+      transform:translateX(-50%);
+      background:#238636;
+      color:#fff;
+      padding:12px 24px;
+      border-radius:10px;
+      font-weight:600;
+      opacity:0;
+      transition:opacity .3s;
+      pointer-events:none;
+      z-index:999;
+    }
     .toast.show{opacity:1}
-    .progress{width:100%;max-width:700px;height:6px;background:#333;border-radius:3px;margin-top:10px;overflow:hidden;display:none}
-    .progress .bar{height:100%;background:linear-gradient(90deg,#667eea,#764ba2);width:0%;transition:width .3s}
-    .progress-text{font-size:12px;color:#888;margin-top:4px;text-align:center}
+
+    /* === HIDDEN === */
+    #file{display:none}
+
+    /* === RESPONSIVE === */
+    @media (max-width:600px){
+      .dropzone{padding:40px 20px}
+      .btns{flex-direction:column}
+      .btn{width:100%;justify-content:center}
+    }
   </style>
 </head>
 <body>
@@ -44,15 +234,34 @@
   <div class="dropzone" id="dz">
     <div class="ic">📁</div>
     <p>Drop a file here or click to select</p>
-    <small>PDF • DOCX • XLSX • PPTX • CSV • TXT • MD • JSON • <strong>Images (OCR)</strong></small>
+    <small>Supports 20+ formats with AI-powered OCR</small>
+    <div class="formats">
+      <span class="format">PDF</span>
+      <span class="format">DOCX</span>
+      <span class="format">XLSX</span>
+      <span class="format">PPTX</span>
+      <span class="format">CSV</span>
+      <span class="format">TXT</span>
+      <span class="format">JSON</span>
+      <span class="format ocr">🔍 OCR</span>
+    </div>
     <input type="file" id="file" accept=".pdf,.docx,.xlsx,.xls,.pptx,.txt,.md,.json,.xml,.html,.css,.js,.py,.ts,.csv,.java,.c,.cpp,.go,.rs,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tiff">
   </div>
 
   <div id="out">
     <div class="info">
-      <div class="card">📄 <b id="fn">-</b></div>
-      <div class="card">📊 <b id="tk">-</b> tokens</div>
-      <div class="card">📦 <b id="ch">-</b> chars</div>
+      <div class="card">
+        <b id="fn">-</b>
+        <div class="card-label">File</div>
+      </div>
+      <div class="card">
+        <b id="tk">-</b> tokens
+        <div class="card-label">Estimated</div>
+      </div>
+      <div class="card">
+        <b id="ch">-</b> chars
+        <div class="card-label">Total</div>
+      </div>
     </div>
     <textarea id="md" readonly></textarea>
     <div class="btns">
@@ -63,7 +272,9 @@
   </div>
 
   <div class="progress" id="prog">
-    <div class="bar" id="bar"></div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="bar"></div>
+    </div>
     <div class="progress-text" id="progTxt"></div>
   </div>
 

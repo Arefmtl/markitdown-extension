@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MarkItDown - AI File to Markdown",
-  "version": "1.2.1",
+  "version": "1.4.0",
   "description": "Convert files to Markdown before sending to AI chat — save tokens, keep context",
   "permissions": ["activeTab", "storage"],
   "content_security_policy": {
