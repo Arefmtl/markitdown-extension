@@ -6,9 +6,10 @@
 (function() {
   'use strict';
 
-  // === PDF.js Setup ===
+  // === PDF.js Setup (fake worker for content scripts) ===
   if (typeof pdfjsLib !== 'undefined') {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdf.worker.min.js');
+    // Content scripts can't use real workers in MV3 — use fake worker
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
   }
 
   // === PLATFORM DETECTION ===

@@ -5,12 +5,9 @@
 (function() {
   'use strict';
 
-  // PDF.js worker
+  // PDF.js worker — fake worker for extension pages
   if (typeof pdfjsLib !== 'undefined') {
-    const isExt = typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL;
-    pdfjsLib.GlobalWorkerOptions.workerSrc = isExt
-      ? chrome.runtime.getURL('lib/pdf.worker.min.js')
-      : 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
   }
 
   const dz = document.getElementById('dz');
