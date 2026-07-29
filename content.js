@@ -1,15 +1,46 @@
 /**
- * MarkItDown Content Script v2
+ * MarkItDown Content Script v3
  * Injects file-to-markdown converter into AI chat interfaces
+ * v1.4.3 — Added OCR support for images
  */
 
-(function() {
+(async function() {
   'use strict';
 
   // === PDF.js Setup (fake worker for content scripts) ===
   if (typeof pdfjsLib !== 'undefined') {
-    // Content scripts can't use real workers in MV3 — use fake worker
     pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+  }
+
+  // === Tesseract.js Setup ===
+  let ocrWorker = null;
+
+  async function getOcrWorker() {
+    if (ocrWorker) return ocrWorker;
+    ocrWorker = await Tesseract.createWorker('eng', 1, {
+      workerPath: chrome.runtime.getURL('lib/tesseract.worker.min.js'),
+      langPath: chrome.runtime.getURL('lib'),
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.round(m.progress * 100);
+          const el = document.getElementById('md-converting-text');
+          if (el) el.textContent = `OCR: ${pct}%`;
+        }
+      }
+    });
+    return ocrWorker;
+  }
+
+  async function ocrImage(data) {
+    let worker = null;
+    try {
+      worker = await getOcrWorker();
+      const { data: { text } } = await worker.recognize(data);
+      return text;
+    } catch (e) {
+      console.error('OCR failed:', e);
+      return '[OCR failed: ' + e.message + ']';
+    }
   }
 
   // === PLATFORM DETECTION ===
@@ -22,7 +53,6 @@
     if (host.includes('you.com')) return 'you';
     if (host.includes('poe.com')) return 'poe';
     if (host.includes('huggingface.co')) return 'huggingface';
-    // Allow on ANY page for testing
     return 'generic';
   }
 
@@ -32,13 +62,32 @@
     if (typeof pdfjsLib === 'undefined') return '[PDF.js not loaded]';
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
     let md = '';
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      const text = content.items.map(item => item.str).join(' ');
-      if (text.trim()) md += `\n---\n**Page ${i}**\n\n${text}\n`;
+      const text = content.items.map(item => item.str).join(' ').trim();
+
+      if (text.length > 10) {
+        md += `\n---\n**Page ${i}**\n\n${text}\n`;
+      } else {
+        // Scanned page — OCR it
+        const vp = page.getViewport({ scale: 2.0 });
+        canvas.width = vp.width;
+        canvas.height = vp.height;
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        const imgData = canvas.toDataURL('image/png');
+        const ocrText = await ocrImage(imgData);
+        if (ocrText && ocrText.trim() && !ocrText.startsWith('[OCR failed')) {
+          md += `\n---\n**Page ${i}** (OCR)\n\n${ocrText.trim()}\n`;
+        } else {
+          md += `\n---\n**Page ${i}** *(empty)*\n`;
+        }
+      }
     }
-    return md.trim() || '[PDF: no extractable text]';
+    return md.trim() || '[PDF: no text found]';
   }
 
   async function docxToMarkdown(buffer) {
@@ -56,10 +105,8 @@
       const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
       if (data.length === 0) return;
       md += `\n### 📊 Sheet: ${name}\n\n`;
-      // Table header
       md += '| ' + data[0].join(' | ') + ' |\n';
       md += '| ' + data[0].map(() => '---').join(' | ') + ' |\n';
-      // Table rows
       data.slice(1).forEach(row => {
         md += '| ' + row.map(c => c ?? '').join(' | ') + ' |\n';
       });
@@ -94,16 +141,33 @@
     const headers = parse(lines[0]);
     let md = '| ' + headers.join(' | ') + ' |\n';
     md += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
-    lines.slice(1, 51).forEach(line => { // limit to 50 rows
+    lines.slice(1, 51).forEach(line => {
       md += '| ' + parse(line).join(' | ') + ' |\n';
     });
     if (lines.length > 51) md += `\n*... ${lines.length - 1} total rows (showing first 50)*\n`;
     return md;
   }
 
+  const imgExts = ['png','jpg','jpeg','webp','gif','bmp','tiff'];
+
+  async function imageToMarkdown(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const text = await ocrImage(url);
+      return text || '[OCR: no text found]';
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
   async function convertFile(file) {
     const buffer = await file.arrayBuffer();
     const ext = file.name.split('.').pop().toLowerCase();
+
+    if (imgExts.includes(ext)) {
+      return imageToMarkdown(file);
+    }
+
     switch (ext) {
       case 'pdf': return pdfToMarkdown(buffer);
       case 'docx': return docxToMarkdown(buffer);
@@ -123,24 +187,21 @@
 
   // === INJECT TEXT INTO CHAT ===
   function injectIntoChat(text) {
-    // Try multiple selectors for different platforms
     const selectors = [
-      'div#prompt-textarea',           // ChatGPT
-      'div[contenteditable="true"]',    // Claude, generic
-      'div.ql-editor',                 // Gemini
-      'textarea',                      // Fallback
+      'div#prompt-textarea',
+      'div[contenteditable="true"]',
+      'div.ql-editor',
+      'textarea',
     ];
-    
     for (const sel of selectors) {
       const input = document.querySelector(sel);
-      if (input && input.offsetParent !== null) { // visible check
+      if (input && input.offsetParent !== null) {
         input.focus();
         if (input.tagName === 'TEXTAREA') {
           const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
           nativeInputValueSetter.call(input, text);
           input.dispatchEvent(new Event('input', { bubbles: true }));
         } else {
-          // contenteditable
           input.innerHTML = text.replace(/\n/g, '<br>');
           input.dispatchEvent(new Event('input', { bubbles: true }));
         }
@@ -166,9 +227,10 @@
         <div class="md-dropzone" id="md-dropzone">
           <div class="md-drop-icon">📁</div>
           <div class="md-drop-text">Drop file here or click</div>
-          <div class="md-drop-hint">PDF, DOCX, XLSX, PPTX, CSV, TXT</div>
+          <div class="md-drop-hint">PDF, DOCX, XLSX, PPTX, CSV, TXT, Images (OCR)</div>
           <input type="file" id="md-file-input" 
-                 accept=".pdf,.docx,.xlsx,.xls,.pptx,.txt,.md,.json,.xml,.html,.css,.js,.py,.ts,.csv" hidden>
+                 accept=".pdf,.docx,.xlsx,.xls,.pptx,.txt,.md,.json,.xml,.html,.css,.js,.py,.ts,.csv,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tiff"
+                 hidden>
         </div>
         <div class="md-preview" id="md-preview" style="display:none">
           <div class="md-file-info" id="md-file-info"></div>
@@ -181,7 +243,7 @@
         </div>
         <div class="md-converting" id="md-converting" style="display:none">
           <div class="md-spinner"></div>
-          <div>Converting...</div>
+          <div id="md-converting-text">Converting...</div>
         </div>
       </div>
     `;
@@ -196,8 +258,7 @@
     dz.ondragover = (e) => { e.preventDefault(); dz.classList.add('md-dragover'); };
     dz.ondragleave = () => dz.classList.remove('md-dragover');
     dz.ondrop = (e) => {
-      e.preventDefault();
-      dz.classList.remove('md-dragover');
+      e.preventDefault(); dz.classList.remove('md-dragover');
       if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
     };
 
@@ -215,7 +276,6 @@
         document.getElementById('md-insert').textContent = '✅ Inserted!';
         setTimeout(() => { panel.remove(); }, 1000);
       } else {
-        // Fallback: copy to clipboard
         navigator.clipboard.writeText(text);
         document.getElementById('md-insert').textContent = '📋 Copied! Paste manually';
       }
@@ -258,7 +318,6 @@
     const platform = detectPlatform();
     console.log(`[MarkItDown] Platform: ${platform}`);
     injectButton();
-    // Re-inject on DOM changes (SPA navigation)
     new MutationObserver(() => {
       if (!document.getElementById('md-fab')) injectButton();
     }).observe(document.body, { childList: true, subtree: true });
@@ -267,7 +326,6 @@
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
-    // Small delay to ensure page is ready
     setTimeout(init, 500);
   }
 })();
