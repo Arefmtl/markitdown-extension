@@ -1,12 +1,9 @@
 {
   "manifest_version": 3,
   "name": "MarkItDown - AI File to Markdown",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Convert files to Markdown before sending to AI chat — save tokens, keep context",
   "permissions": ["activeTab", "storage"],
-  "content_security_policy": {
-    "extension_pages": "script-src 'self' https://cdnjs.cloudflare.com https://cdn.sheetjs.com https://cdn.jsdelivr.net; object-src 'self'"
-  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -23,7 +20,13 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["lib/pdf.min.js", "lib/mammoth.browser.min.js", "lib/xlsx.full.min.js", "lib/tesseract.min.js", "content.js"],
+      "js": [
+        "lib/pdf.min.js",
+        "lib/mammoth.browser.min.js",
+        "lib/xlsx.full.min.js",
+        "lib/tesseract.min.js",
+        "content.js"
+      ],
       "css": ["content.css"],
       "run_at": "document_idle"
     }
@@ -33,7 +36,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["lib/pdf.worker.min.js", "lib/tesseract.min.js"],
+      "resources": ["lib/pdf.worker.min.js"],
       "matches": ["<all_urls>"]
     }
   ]
