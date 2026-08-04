@@ -3,6 +3,7 @@
   "name": "MarkItDown - AI File to Markdown",
   "version": "1.4.3",
   "description": "Convert files to Markdown before sending to AI chat — save tokens, keep context",
+  "update_url": "https://arefmtl.github.io/markitdown-extension/updates.xml",
   "permissions": ["activeTab", "storage"],
   "action": {
     "default_popup": "popup.html",
